@@ -1,0 +1,148 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+# Upload training data
+from google.colab import files
+uploaded_train = files.upload()
+
+# Read training data
+train_df = pd.read_csv(list(uploaded_train.keys())[0])
+
+# Upload testing data
+uploaded_test = files.upload()
+
+# Read testing data
+test_df = pd.read_csv(list(uploaded_test.keys())[0])
+
+import nltk
+from nltk.stem import PorterStemmer
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+
+import pandas as pd
+
+# Preprocess the lyrics
+stemmer = PorterStemmer()
+
+def preprocess_lyrics(lyrics):
+    if isinstance(lyrics, str):
+        words = nltk.word_tokenize(lyrics.lower())
+        words = [stemmer.stem(word) for word in words if word.isalnum() and word not in nltk.corpus.stopwords.words('english')]
+        return ' '.join(words)
+    else:
+        return ""
+
+train_df['lyrics'] = train_df['lyrics'].apply(preprocess_lyrics)
+test_df['lyrics'] = test_df['lyrics'].apply(preprocess_lyrics)
+
+# Combine genre and mood for clustering
+train_df['genre_mood'] = train_df['genre'] + '_' + train_df['mood']
+test_df['genre_mood'] = test_df['genre'] + '_' + test_df['mood']
+
+# 2. Feature Engineering with Increased Features
+vectorizer = TfidfVectorizer(max_features=10000)  # Increased max_features
+
+X_train = vectorizer.fit_transform(train_df['lyrics'])
+X_test = vectorizer.transform(test_df['lyrics'])
+
+# 3. Feature Scaling using StandardScaler
+scaler = StandardScaler(with_mean=False)  # Create a StandardScaler instance
+X_train = scaler.fit_transform(X_train)  # Fit and transform training data
+X_test = scaler.transform(X_test)  # Transform testing data
+
+# 4. Combined Elbow Method and Silhouette Score for Optimal k
+wcss = []
+silhouette_scores = []
+for k in range(2, min(11, X_train.shape[0])):
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    kmeans.fit(X_train)
+    wcss.append(kmeans.inertia_)
+    labels = kmeans.labels_
+    if len(np.unique(labels)) > 1:  # Check for valid clusters to avoid ValueError
+        silhouette_scores.append(silhouette_score(X_train, labels))
+    else:
+        silhouette_scores.append(-1)
+
+# Determine optimal k using the elbow method
+wcss = []  # Within-cluster sum of squares
+for k in range(2, min(11, X_train.shape[0])):  # Limit k to n_samples - 1 or 10
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    kmeans.fit(X_train)
+    wcss.append(kmeans.inertia_)  # Inertia is the WCSS
+
+# Plot the elbow curve
+plt.plot(range(2, min(11, X_train.shape[0])), wcss, marker='o')
+plt.title('Elbow Method for Optimal k')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('WCSS')
+plt.show()
+
+# Visually identify the elbow point (optimal k) from the plot
+optimal_k = 4  # Based on the elbow method
+
+
+# TF-IDF Vectorization
+vectorizer = TfidfVectorizer(max_features=5000) # Limit features for better performance
+
+X_train = vectorizer.fit_transform(train_df['lyrics'])
+X_test = vectorizer.transform(test_df['lyrics'])
+
+# Determine optimal k using silhouette score
+silhouette_scores = []
+for k in range(2, min(11, X_train.shape[0])):  # Limit k to n_samples - 1
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    kmeans.fit(X_train)
+    labels = kmeans.labels_
+    # Check for the condition len(np.unique(labels)) > 1
+    if len(np.unique(labels)) > 1:
+        score = silhouette_score(X_train, labels)
+        silhouette_scores.append(score)
+    else:
+        silhouette_scores.append(-1)  # Assign a low score if only one cluster is found
+
+
+optimal_k = np.argmax(silhouette_scores) + 2
+
+# Ensure optimal_k is at least 2
+optimal_k = max(2, optimal_k)
+
+# K-Means Clustering
+kmeans = KMeans(n_clusters=optimal_k, random_state=42)
+kmeans.fit(X_train)
+
+# Predict clusters for test data
+test_predictions = kmeans.predict(X_test)
+
+# Map cluster labels back to genre_mood (using majority class within each cluster)
+cluster_mapping = {}
+for i in range(optimal_k):
+    cluster_data = train_df[kmeans.labels_ == i]
+    majority_genre_mood = cluster_data['genre_mood'].mode().iloc[0]
+    cluster_mapping[i] = majority_genre_mood
+
+predicted_genre_mood = [cluster_mapping[pred] for pred in test_predictions]
+
+# Evaluate accuracy
+correct_predictions = 0
+for i in range(len(test_predictions)):
+  if predicted_genre_mood[i] == test_df['genre_mood'].iloc[i]:
+    correct_predictions += 1
+accuracy = correct_predictions / len(test_predictions)
+
+print(f"Accuracy: {accuracy}")
+
+
+# Show predictions for each song
+for i in range(len(test_df)):
+    song_title = test_df['song title'].iloc[i]
+    predicted_genre, predicted_mood = predicted_genre_mood[i].split('_')
+    actual_genre = test_df['genre'].iloc[i]
+    actual_mood = test_df['mood'].iloc[i]
+    print(f"{song_title}: Predicted Genre - {predicted_genre}, Predicted Mood - {predicted_mood}, Actual Genre - {actual_genre}, Actual Mood - {actual_mood}")
+
+# Print silhouette scores and optimal k
+print("Silhouette Scores:", silhouette_scores)
+print("Optimal k:", optimal_k)
