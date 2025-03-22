@@ -1,0 +1,1 @@
+Hi there, this classifer is tailored to classify Taylor Swift music based on the lyrics. It uses K-means clustering to determine the genre and mood based on the lyrics. The train data should contain the following features: 'Song Title', 'Lyrics', 'Genre', and 'Mood'.
